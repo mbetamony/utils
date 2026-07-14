@@ -40,30 +40,33 @@ const runCommand = (cmd) => {
   });
 };
 
-
 const monitorPods = async () => {
-  const output = await runCommand(
-    `kubectl top pod -n ${NAMESPACE} -l ${APP_LABEL} --no-headers`,
+  const apiOutput = await runCommand(
+    `kubectl top pod -n ${NAMESPACE} -l ${APP_LABEL} --no-headers`
   );
-  if (!output) return;
+
+
+  const pgOutput = await runCommand(
+    `kubectl top pod -n ${NAMESPACE} --no-headers | grep postgres-helper`
+  );
 
   const entries = [];
-  output.split("\n").forEach((line) => {
+  const combinedOutput = (apiOutput || "") + "\n" + (pgOutput || "");
+
+  combinedOutput.split("\n").forEach((line) => {
     if (!line.trim()) return;
     const parts = line.trim().split(/\s+/);
     if (parts.length >= 3) {
-      const [name, cpu, mem] = parts;
-      entries.push(`${now()},${name},${cpu},${mem}`);
+        const [name, cpu, mem] = parts;
+        entries.push(`${now()},${name},${cpu},${mem}`);
     }
   });
 
   if (entries.length > 0) {
     fs.appendFileSync(files.pods, entries.join("\n") + "\n");
-    console.log(`[${now()}] Logged ${entries.length} pods`);
+    console.log(`[${now()}] ✅ Logged ${entries.length} pods (API + DB Helper)`);
   }
-};
-
-const monitorNodes = async () => {
+};const monitorNodes = async () => {
   const output = await runCommand(`kubectl top nodes --no-headers`);
   if (!output) return;
 

@@ -1,0 +1,94 @@
+#!/bin/bash
+# createWt — Create a new git worktree + VS Code workspace file
+#
+# Usage:
+#   createWt <worktree-name> [base-branch]
+#
+# Examples:
+#   createWt lit-2610-feature-auth
+#   createWt lit-2610-feature-auth origin/lit-2610
+#
+# What it does:
+#   1. Creates a new git worktree at ~/sourcegit/literatum-worktrees/<name>
+#   2. Creates ~/sourcegit/<name>.code-workspace scoped to that worktree
+#
+# After running, open VS Code and:
+#   File > Open Workspace from File > <name>.code-workspace
+# The existing lit-wt container will be reused — no rebuild needed.
+
+set -e
+
+WORKTREE_NAME="${1}"
+BASE_BRANCH="${2:-HEAD}"
+SOURCEGIT_DIR="${HOME}/sourcegit"
+WORKTREES_DIR="${SOURCEGIT_DIR}/literatum-worktrees"
+GIT_DIR="${WORKTREES_DIR}/master"
+
+# ── Validate ──────────────────────────────────────────────────────────────────
+if [ -z "${WORKTREE_NAME}" ]; then
+    echo "Usage: createWt <worktree-name> [base-branch]"
+    echo ""
+    echo "Examples:"
+    echo "  createWt lit-2610-feature-auth"
+    echo "  createWt lit-2610-feature-auth origin/lit-2610"
+    exit 1
+fi
+
+WORKTREE_PATH="${WORKTREES_DIR}/${WORKTREE_NAME}"
+WORKSPACE_FILE="${SOURCEGIT_DIR}/${WORKTREE_NAME}.code-workspace"
+
+if [ -d "${WORKTREE_PATH}" ]; then
+    echo "Error: worktree path already exists: ${WORKTREE_PATH}"
+    exit 1
+fi
+
+if [ -f "${WORKSPACE_FILE}" ]; then
+    echo "Error: workspace file already exists: ${WORKSPACE_FILE}"
+    exit 1
+fi
+
+# ── Create git worktree ───────────────────────────────────────────────────────
+echo "Creating worktree '${WORKTREE_NAME}' from '${BASE_BRANCH}'..."
+git -C "${GIT_DIR}" worktree add -b "${WORKTREE_NAME}" "${WORKTREE_PATH}" "${BASE_BRANCH}"
+echo "  ✓ git worktree created at ${WORKTREE_PATH}"
+
+# ── Build search exclusions for all OTHER worktrees ───────────────────────────
+# Reads current worktree list and excludes everything except the new one.
+EXCLUDE_BLOCK=""
+while IFS= read -r line; do
+    wt_path=$(echo "$line" | awk '{print $1}')
+    wt_name=$(basename "$wt_path")
+    # Skip the new worktree and bare repo entries
+    if [ "${wt_name}" = "${WORKTREE_NAME}" ] || [ "${wt_path}" = "${GIT_DIR}" ]; then
+        continue
+    fi
+    EXCLUDE_BLOCK="${EXCLUDE_BLOCK}
+      \"**/literatum-worktrees/${wt_name}/**\": true,"
+done < <(git -C "${GIT_DIR}" worktree list 2>/dev/null)
+
+# ── Write .code-workspace ─────────────────────────────────────────────────────
+cat > "${WORKSPACE_FILE}" << EOF
+{
+  "folders": [
+    {
+      "path": "literatum-worktrees/${WORKTREE_NAME}/atypon",
+      "name": "${WORKTREE_NAME}"
+    }
+  ],
+  "settings": {
+    "search.exclude": {${EXCLUDE_BLOCK}
+    },
+    "files.exclude": {${EXCLUDE_BLOCK}
+    }
+  }
+}
+EOF
+echo "  ✓ workspace file created at ${WORKSPACE_FILE}"
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+echo ""
+echo "All done! To open in VS Code (no container rebuild):"
+echo "  File > Open Workspace from File > ${WORKTREE_NAME}.code-workspace"
+echo ""
+echo "To navigate in the container shell:"
+echo "  cdwt ${WORKTREE_NAME}"

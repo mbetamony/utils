@@ -1,0 +1,90 @@
+{
+  "name": "Literatum Worktrees",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "options": ["--platform=linux/amd64"]
+  },
+  // NOTE: this image runs as linux/amd64. On Apple Silicon that means emulation,
+  // which makes bind-mount filesystem syscalls flaky — e.g.
+  //   "EBADF: bad file descriptor, scandir ..."  during builds.
+  // For a stable environment, in Docker Desktop -> Settings -> General enable BOTH:
+  //   * "Use Rosetta for x86_64/amd64 emulation on Apple Silicon" (needs the
+  //     Virtualization framework; replaces flaky QEMU)
+  //   * file sharing implementation = VirtioFS
+  // Those are Docker Desktop global settings (not container fields); toggling them
+  // and restarting Docker fixes the EBADF errors WITHOUT an image rebuild.
+  "runArgs": [
+    "--name=lit-wt",
+    "--network=dev_default",
+    "--platform=linux/amd64",
+    // raise the open-file limit so large builds don't exhaust descriptors
+    "--ulimit=nofile=1048576:1048576",
+    "--hostname=devsc-mbetamony",
+    "--dns-search=lan",
+    "--dns-search=atypon.com",
+    "--dns-search=wiley.com",
+    "--add-host=api:host-gateway",
+    "--add-host=mbetamony:127.0.0.1",
+    "--add-host=devcontainer-mbetamony:127.0.0.1",
+    "--add-host=dev-mbetamony:127.0.0.1"
+  ],
+  "remoteUser": "mbetamony",
+  "customizations": {
+    "jetbrains": {
+      "backend": "IntelliJ"
+    },
+    "vscode": {
+      "settings": {
+        "remote.containers.defaultExtensions": []
+      }
+    }
+  },
+  "shutdownAction": "none",
+
+  // ── Mounts ─────────────────────────────────────────────────────────────────
+  // workspaceMount binds the entire ~/sourcegit tree so all worktrees are
+  // accessible inside the container at /home/mbetamony/sourcegit without
+  // needing to rebuild when you add a new worktree.
+  "workspaceMount": "source=${localEnv:HOME}/sourcegit,target=/home/mbetamony/sourcegit,type=bind",
+  "workspaceFolder": "/home/mbetamony/sourcegit/literatum-worktrees/lit-2410/atypon",
+  "mounts": [
+    // Maven cache — shared across all worktrees
+    "source=${localEnv:HOME}/.m2,target=/home/mbetamony/.m2,type=bind,consistency=cached",
+    // SSH keys (read-only; setup.sh copies pub keys for the in-container SSH server)
+    "source=${localEnv:HOME}/.ssh,target=/home/mbetamony/.ssh,type=bind,ro",
+    // Patch worktree shortcut for lit-2410 (overlay inside the worktree)
+    "source=${localEnv:HOME}/sourcegit/literatum-patch-worktrees/master,target=/home/mbetamony/sourcegit/literatum-worktrees/lit-2410/atypon/patch,type=bind,consistency=cached",
+    // IntelliJ config — persists SDK table, IDE settings, and compile-server cache
+    "source=${localEnv:HOME}/.config/JetBrains,target=/home/mbetamony/.config/JetBrains,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.cache/JetBrains,target=/home/mbetamony/.cache/JetBrains,type=bind,consistency=cached"
+  ],
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  "updateContentCommand": "chmod +x /home/mbetamony/sourcegit/.devcontainer/setup.sh && /home/mbetamony/sourcegit/.devcontainer/setup.sh",
+  "postStartCommand": "chmod +x /home/mbetamony/sourcegit/.devcontainer/start-ssh.sh && /home/mbetamony/sourcegit/.devcontainer/start-ssh.sh",
+
+  // ── Environment ────────────────────────────────────────────────────────────
+  // USER/LOGNAME must be present or env.py/setprod crash with KeyError: 'USER'
+  // and the prompt loses its user segment. Also baked into the Dockerfile so
+  // SSH-into-container sessions (Zed on 2222) get them too.
+  "containerEnv": {
+    "TZ": "Asia/Amman",
+    "USER": "mbetamony",
+    "LOGNAME": "mbetamony"
+  },
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/opt/puppetlabs/bin",
+    "USER": "mbetamony",
+    "LOGNAME": "mbetamony"
+  },
+
+  // ── Ports ──────────────────────────────────────────────────────────────────
+  // 2222 → container SSH for Zed and other SSH-based editors
+  "forwardPorts": [18080, 17070, 9090, 2222],
+  "portsAttributes": {
+    "2222": {
+      "label": "SSH (Zed / remote editors)",
+      "onAutoForward": "silent"
+    }
+  }
+}

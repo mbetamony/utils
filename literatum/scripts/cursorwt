@@ -1,0 +1,35 @@
+#!/bin/bash
+# cursorwt — Open a literatum worktree in Cursor attached to the running lit-wt container
+#
+# Attaches Cursor to the existing lit-wt container WITHOUT spinning up a new one.
+# The worktree must already exist under ~/sourcegit/literatum-worktrees/.
+#
+# Usage (run on your Mac, not inside the container):
+#   cursorwt <worktree-name>
+#
+# Examples:
+#   cursorwt lit-2410
+#   cursorwt lit-2610
+#
+# Prerequisites:
+#   - The lit-wt container must be running:  docker ps | grep lit-wt
+#   - The `cursor` CLI must be in PATH:
+#       Cursor → Cmd+Shift+P → "Shell Command: Install 'cursor' command in PATH"
+#   - nameConfigs must be set up for the vscode→mbetamony user mapping (one-time):
+#       See docs/devcontainer-setup.md → "Cursor one-time setup"
+
+WORKTREE_NAME="${1}"
+
+if [ -z "${WORKTREE_NAME}" ]; then
+    echo "Usage: cursorwt <worktree-name>  (e.g. cursorwt lit-2610)"
+    exit 1
+fi
+
+CONTAINER_NAME="lit-wt"
+REMOTE_PATH="/home/mbetamony/sourcegit/literatum-worktrees/${WORKTREE_NAME}/atypon"
+
+# Build the attached-container URI — hex-encode the container identity JSON
+HEX=$(echo -n "{\"containerName\":\"/${CONTAINER_NAME}\",\"remoteUser\":\"mbetamony\"}" | xxd -p | tr -d '\n')
+
+echo "Opening ${WORKTREE_NAME} in Cursor (attached to ${CONTAINER_NAME})..."
+cursor --folder-uri "vscode-remote://attached-container+${HEX}${REMOTE_PATH}"

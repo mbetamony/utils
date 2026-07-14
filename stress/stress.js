@@ -65,6 +65,7 @@ const QUERY_CREATE = JSON.stringify({
     }`,
 });
 
+
 export const options = {
   scenarios: {
     upload_workflow: {
@@ -73,7 +74,7 @@ export const options = {
       startVUs: 0,
       stages: [
         { duration: "2m", target: 50 },
-        { duration: "10m", target: 50 },
+        { duration: "8m", target: 50 },
         { duration: "2m", target: 0 },
       ],
       gracefulRampDown: "30s",
@@ -83,8 +84,8 @@ export const options = {
       executor: "ramping-vus",
       startVUs: 0,
       stages: [
-        { duration: "2m", target: 75 },
-        { duration: "10m", target: 75 },
+        { duration: "2m", target: 50 },
+        { duration: "8m", target: 50 },
         { duration: "2m", target: 0 },
       ],
       gracefulRampDown: "30s",
@@ -99,6 +100,7 @@ export const options = {
     // step_latency: ["p(95)<500"],
   },
 };
+
 
 export function runUploadWorkflow() {
   runStressCycle("upload");
@@ -183,8 +185,8 @@ const pollSubmission = (submissionId, durationMetric) => {
   let attempts = 0;
   let sleepTime = 2;
 
-  // Poll for up to ~2 minutes
-  while (!isReady && attempts < 25) {
+  // Poll for up to ~3 minutes
+  while (!isReady && attempts < 40) {
     sleep(sleepTime);
     sleepTime = Math.min(10, sleepTime * 1.5);
 
@@ -266,7 +268,7 @@ const applySteps = (token, projectId, manuscriptId, stepsArray, repeat) => {
   const STEPS_URL = `${MANUSCRIPTS_API_BASE}/api/v2/doc/${projectId}/manuscript/${manuscriptId}/steps`;
 
   // Increased to 300 to reduce pressure on Creation API and focus on Editor API
-  const loopCount = repeat ? 300 : 1;
+  const loopCount = repeat ? 500 : 1;
   const totalSteps = stepsArray.length * loopCount;
 
   console.log(`[VU ${__VU}] Applying ${totalSteps} total batches...`);
@@ -377,7 +379,6 @@ function runStressCycle(mode) {
     if (mode === "upload") loginWM(email);
     const authToken = loginManuscripts(submissionId);
 
-    // Run steps (with REPEAT_BLANK check)
     applySteps(
       authToken,
       projectId,
